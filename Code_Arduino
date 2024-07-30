@@ -1,0 +1,84 @@
+#define BLYNK_TEMPLATE_ID "TMPL3dN3RgT4a"
+#define BLYNK_TEMPLATE_NAME "angle measurement"
+#define BLYNK_AUTH_TOKEN "Q2Sxq9S3GaruJFjaXTvLpX2ClXtMJqjJ"
+#define BLYNK_PRINT Serial
+
+#include <WiFi.h>
+#include <WiFiClient.h>
+#include <BlynkSimpleEsp32.h>
+#include <MPU6050.h>
+#include <math.h>
+
+char auth[] = BLYNK_AUTH_TOKEN;
+char ssid[] = "9179493035";
+char pass[] = "987654321";
+
+MPU6050 mpu1(0x68); // MPU6050 #1 with I2C address 0x68
+MPU6050 mpu2(0x69); // MPU6050 #2 with I2C address 0x69
+
+BlynkTimer timer;
+
+float roll1 = 0.0; // Roll angle for MPU6050 #1
+float roll2 = 0.0; // Roll angle for MPU6050 #2
+
+// Function to calculate angle difference in degrees between two angles (-180 to +180)
+float calculateAngleDifference(float angle1, float angle2) {
+  float difference = angle1 - angle2;
+  
+  // Normalize difference to range between -180 to +180 degrees
+  if (difference > 180.0) {
+    difference -= 360.0;
+  } else if (difference < -180.0) {
+    difference += 360.0;
+  }
+  
+  return difference;
+}
+
+void calculateAndSendAngles() {
+  // Variables to store accelerometer readings
+  int16_t ax1, ay1, az1;
+  int16_t ax2, ay2, az2;
+
+  // Read accelerometer data from MPU6050 #1
+  mpu1.getAcceleration(&ax1, &ay1, &az1);
+
+  // Read accelerometer data from MPU6050 #2
+  mpu2.getAcceleration(&ax2, &ay2, &az2);
+
+  // Calculate roll angles for MPU6050 #1 and #2
+  roll1 = atan2(ax1, sqrt(ay1 * ay1 + az1 * az1)) * 180.0 / M_PI;
+  roll2 = atan2(ax2, sqrt(ay2 * ay2 + az2 * az2)) * 180.0 / M_PI;
+
+  // Send roll angles to Blynk app (virtual pins V0 and V1)
+  Blynk.virtualWrite(V0, roll1);
+  Blynk.virtualWrite(V1, roll2);
+
+  // Calculate angle difference between roll1 and roll2
+  float angleDifference = calculateAngleDifference(roll1, roll2);
+
+  // Send angle difference to Blynk app (virtual pin V2)
+  Blynk.virtualWrite(V2, angleDifference);
+}
+
+void setup() {
+  Wire.begin();
+  Serial.begin(115200);
+  Blynk.begin(auth, ssid, pass, "blynk.cloud", 80);
+
+  // Initialize MPU6050 sensors
+  mpu1.initialize();
+  mpu2.initialize();
+
+  // Verify connection to both sensors
+  Serial.println(mpu1.testConnection() ? "MPU6050 #1 connection successful" : "MPU6050 #1 connection failed");
+  Serial.println(mpu2.testConnection() ? "MPU6050 #2 connection successful" : "MPU6050 #2 connection failed");
+
+  // Setup a timer to calculate and send angles every 500 milliseconds
+  timer.setInterval(500L, calculateAndSendAngles); // L suffix is used for long type literals
+}
+
+void loop() {
+  Blynk.run(); // Ensure Blynk is connected and processes incoming commands
+  timer.run(); // Run BlynkTimer to execute timed tasks
+}
